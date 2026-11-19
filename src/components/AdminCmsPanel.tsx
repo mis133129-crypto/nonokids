@@ -316,8 +316,8 @@ export const AdminCmsPanel: React.FC<{ language: Language }> = ({ language }) =>
           </h2>
           <p className="text-xs text-[#27345C]/75 mt-1">
             {language === 'ar'
-              ? 'أدخل رمز الإدارة لإدارة الدروس، بنك الأسئلة، سعر الامتحان، والشهادات. (الرمز الافتراضي للتطوير: 2026)'
-              : 'Enter the Admin PIN to manage lessons, exam bank, exam pricing, and certificates. (Dev PIN: 2026)'}
+              ? 'أدخل رمز الإدارة المُعدّ على الخادم لإدارة الدروس، بنك الأسئلة، سعر الامتحان، والشهادات.'
+              : 'Enter the server-configured Admin PIN to manage lessons, exam bank, exam pricing, and certificates.'}
           </p>
         </div>
 

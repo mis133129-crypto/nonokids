@@ -317,7 +317,7 @@ async function startServer() {
     if (!authorizedAdmin) {
       const expectedSetupSecret = getSecret('NONOLAND_ADMIN_SETUP_SECRET') || '';
       const providedSetupSecret = String(req.header('x-admin-setup-secret') || '').trim();
-      const configuredPin = process.env.ADMIN_PIN || (!IS_PROD ? '2026' : '');
+      const configuredPin = String(process.env.ADMIN_PIN || '').trim();
       const providedPin = String(req.header('x-admin-pin') || '').trim();
 
       const validSetupSecret =
@@ -571,10 +571,10 @@ async function startServer() {
         return next();
       }
 
-      // 2. Fallback Admin PIN (only when ADMIN_PIN env var is set or dev mode)
-      const configuredPin = process.env.ADMIN_PIN || (!IS_PROD ? '2026' : '');
-      const providedPin = req.header('x-admin-pin');
-      if (configuredPin && providedPin === configuredPin) {
+      // 2. Fallback Admin PIN (fail-closed unless ADMIN_PIN is explicitly configured)
+      const configuredPin = String(process.env.ADMIN_PIN || '').trim();
+      const providedPin = String(req.header('x-admin-pin') || '').trim();
+      if (configuredPin && providedPin && verifySecretTimingSafe(providedPin, configuredPin)) {
         return next();
       }
 
@@ -1469,20 +1469,45 @@ async function startServer() {
   // ------------------------------------------------------------------
   // 1B. LEVEL 1 BACKEND-GRADED ASSESSMENT ENGINE (75 LESSONS / 750 QS)
   // ------------------------------------------------------------------
-  app.post('/api/level1/assessment/start', (req: AuthenticatedRequest, res) => {
+  app.post('/api/level1/assessment/start', requireAuth, (req: AuthenticatedRequest, res) => {
     const db = getDb();
+    const authUser = req.authSession!.user;
+    if (
+      authUser.status !== 'active' ||
+      (authUser.role !== 'parent' && !isChildOrStudentRole(authUser.role) && authUser.role !== 'super_admin')
+    ) {
+      appendSecurityLog(db.securityLogs, {
+        eventType: 'ACCESS_DENIED',
+        actorId: authUser.id,
+        role: authUser.role,
+        ip: getClientIp(req),
+        summary: `Blocked Level 1 assessment start for unauthorized role ${authUser.role}`,
+      });
+      saveDb(db);
+      return res.status(403).json({ error: 'Forbidden: not authorized to start child assessments' });
+    }
+
     const { childId, lessonId, questionCount } = req.body as {
       childId?: string;
       lessonId?: string;
       questionCount?: number;
     };
 
-    if (!childId || !lessonId) {
-      return res.status(400).json({ error: 'childId and lessonId are required' });
+    if (!childId || typeof childId !== 'string') {
+      return res.status(400).json({ error: 'childId is required' });
     }
 
     const access = assertChildAccess(req, res, childId);
-    if (!access) return;
+    if (!access || access === 'untracked-sample') {
+      if (access === 'untracked-sample') {
+        return res.status(404).json({ error: 'Child profile not found' });
+      }
+      return;
+    }
+
+    if (!lessonId || typeof lessonId !== 'string') {
+      return res.status(400).json({ error: 'lessonId is required' });
+    }
 
     const lesson = getLevel1LessonById(lessonId);
     if (!lesson) {
@@ -1627,26 +1652,66 @@ async function startServer() {
   // ------------------------------------------------------------------
   // 2. SECURE BACKEND PAYMENT CHECKOUT & VERIFICATION (50 EGP default)
   // ------------------------------------------------------------------
-  app.post('/api/payments/create-checkout', (req: AuthenticatedRequest, res) => {
+  app.post('/api/payments/create-checkout', requireAuth, (req: AuthenticatedRequest, res) => {
     const db = getDb();
+    const authUser = req.authSession!.user;
+    if (
+      authUser.status !== 'active' ||
+      isChildOrStudentRole(authUser.role) ||
+      req.authSession!.session.sessionKind === 'child' ||
+      (authUser.role !== 'parent' && authUser.role !== 'super_admin')
+    ) {
+      appendSecurityLog(db.securityLogs, {
+        eventType: 'ACCESS_DENIED',
+        actorId: authUser.id,
+        role: authUser.role,
+        ip: getClientIp(req),
+        summary: `Blocked non-parent checkout attempt by role ${authUser.role}`,
+      });
+      saveDb(db);
+      return res.status(403).json({ error: 'Forbidden: only active parents may create payment checkouts' });
+    }
+
     if (!db.featureFlags.paidAssessmentsEnabled) {
       return res.status(403).json({
         error: 'Paid assessments are currently disabled by administrator',
         featureDisabled: 'paidAssessmentsEnabled',
       });
     }
+
     const { childId, subject, parentConfirmed } = req.body as {
       childId?: string;
       subject?: ExamSubject;
       parentConfirmed?: boolean;
     };
 
-    if (parentConfirmed !== true || !childId) {
-      return res.status(400).json({ error: 'Parental confirmation and childId are required' });
+    if (!childId || typeof childId !== 'string') {
+      return res.status(400).json({ error: 'childId is required' });
     }
 
     const access = assertChildAccess(req, res, childId);
-    if (!access) return;
+    if (!access || access === 'untracked-sample') {
+      if (access === 'untracked-sample') {
+        return res.status(404).json({ error: 'Child profile not found' });
+      }
+      return;
+    }
+
+    if (authUser.role !== 'super_admin' && !canUserAccessChild(db, authUser, access, 'manage_learning_settings')) {
+      appendSecurityLog(db.securityLogs, {
+        eventType: 'ACCESS_DENIED',
+        actorId: authUser.id,
+        role: authUser.role,
+        ip: getClientIp(req),
+        summary: `Blocked checkout without guardian manage_learning_settings permission for child ${childId}`,
+      });
+      saveDb(db);
+      return res.status(403).json({ error: 'Forbidden: insufficient guardian permissions to create checkout' });
+    }
+
+    if (parentConfirmed !== true) {
+      return res.status(400).json({ error: 'Parental confirmation is required' });
+    }
 
     const allowedSubjects: ExamSubject[] = ['comprehensive', 'arabic', 'english', 'math', 'colors-science'];
     const safeSubject: ExamSubject = allowedSubjects.includes(subject as ExamSubject)
@@ -1657,7 +1722,7 @@ async function startServer() {
     const session: CheckoutSession = {
       id: sessionId,
       childId,
-      parentId: req.authSession?.user.id,
+      parentId: authUser.id,
       subject: safeSubject,
       amountEgp: db.examConfig.examPriceEgp, // Always authoritative from server DB!
       status: 'pending',
@@ -1674,38 +1739,83 @@ async function startServer() {
     });
   });
 
-  app.post('/api/payments/verify', async (req: AuthenticatedRequest, res) => {
+  app.post('/api/payments/verify', requireAuth, async (req: AuthenticatedRequest, res) => {
+    const preDb = getDb();
+    const authUser = req.authSession!.user;
+    if (
+      authUser.status !== 'active' ||
+      isChildOrStudentRole(authUser.role) ||
+      req.authSession!.session.sessionKind === 'child' ||
+      (authUser.role !== 'parent' && authUser.role !== 'super_admin')
+    ) {
+      appendSecurityLog(preDb.securityLogs, {
+        eventType: 'ACCESS_DENIED',
+        actorId: authUser.id,
+        role: authUser.role,
+        ip: getClientIp(req),
+        summary: `Blocked non-parent payment verification attempt by role ${authUser.role}`,
+      });
+      saveDb(preDb);
+      return res.status(403).json({ error: 'Forbidden: only active parents may verify payment checkouts' });
+    }
+
+    if (!preDb.featureFlags.paidAssessmentsEnabled) {
+      return res.status(403).json({
+        error: 'Paid assessments are currently disabled by administrator',
+        featureDisabled: 'paidAssessmentsEnabled',
+      });
+    }
+
     const { checkoutSessionId } = req.body as { checkoutSessionId?: string };
-    const outcome = await runWithPgDbLock(`chk:${checkoutSessionId || 'none'}`, async (db) => {
-      if (!checkoutSessionId || !db.checkoutSessions[checkoutSessionId]) {
+    if (!checkoutSessionId || typeof checkoutSessionId !== 'string') {
+      return res.status(400).json({ error: 'checkoutSessionId is required' });
+    }
+
+    const outcome = await runWithPgDbLock(`chk:${checkoutSessionId}`, async (db) => {
+      const session = db.checkoutSessions[checkoutSessionId];
+      if (!session) {
         return { status: 404, body: { error: 'Checkout session not found' } };
       }
 
-      const session = db.checkoutSessions[checkoutSessionId];
-      if (session.parentId) {
-        if (!req.authSession) {
-          return { status: 401, body: { error: 'Authentication required' } };
-        }
-        if (session.parentId !== req.authSession.user.id && req.authSession.user.role !== 'super_admin') {
-          return { status: 403, body: { error: 'Forbidden: checkout belongs to another parent' } };
-        }
-      }
-
-      if (session.tokenConsumed) {
-        return { status: 409, body: { error: 'Checkout session payment token has already been used' } };
-      }
-
-      if (!session.paymentToken) {
-        session.status = 'verified';
-        session.verifiedAt = new Date().toISOString();
-        session.paymentToken = `paytok_${crypto.randomBytes(12).toString('hex')}`;
+      if (!session.parentId || (session.parentId !== authUser.id && authUser.role !== 'super_admin')) {
         appendSecurityLog(db.securityLogs, {
-          eventType: 'PAYMENT_VERIFIED',
-          actorId: req.authSession?.user.id,
+          eventType: 'ACCESS_DENIED',
+          actorId: authUser.id,
+          role: authUser.role,
           ip: getClientIp(req),
-          summary: `Verified ${session.amountEgp} ${db.examConfig.currency} exam checkout ${session.id}`,
+          summary: `Blocked cross-parent payment verification for checkout ${checkoutSessionId}`,
         });
+        return { status: 403, body: { error: 'Forbidden: checkout belongs to another parent' } };
       }
+
+      const child = db.children[session.childId];
+      if (authUser.role !== 'super_admin' && (!child || !canUserAccessChild(db, authUser, child, 'manage_learning_settings'))) {
+        return { status: 403, body: { error: 'Forbidden: insufficient guardian permissions for this child' } };
+      }
+
+      if (db.examConfig.paymentGatewayMode === 'live-gateway') {
+        return {
+          status: 501,
+          body: {
+            error: 'Live payment gateway signature/provider verification is not configured on this server',
+            code: 'LIVE_GATEWAY_NOT_CONFIGURED',
+          },
+        };
+      }
+
+      if (session.tokenConsumed || session.status === 'verified' || session.paymentToken) {
+        return { status: 409, body: { error: 'Checkout session has already been verified or consumed' } };
+      }
+
+      session.status = 'verified';
+      session.verifiedAt = new Date().toISOString();
+      session.paymentToken = `paytok_${crypto.randomBytes(12).toString('hex')}`;
+      appendSecurityLog(db.securityLogs, {
+        eventType: 'PAYMENT_VERIFIED',
+        actorId: authUser.id,
+        ip: getClientIp(req),
+        summary: `Verified ${session.amountEgp} ${db.examConfig.currency} exam checkout ${session.id}`,
+      });
 
       return {
         status: 200,
@@ -2409,6 +2519,10 @@ async function startServer() {
     saveDb,
     requireAuth,
     assertChildAccess,
+  });
+
+  app.use('/api', (_req, res) => {
+    return res.status(404).json({ error: 'API endpoint not found' });
   });
 
   app.use(

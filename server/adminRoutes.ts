@@ -252,9 +252,9 @@ export function registerAdminRoutes(deps: AdminRoutesDeps): void {
         return res.status(403).json({ error: 'Forbidden: Administrator role required' });
       }
     } else {
-      const configuredPin = process.env.ADMIN_PIN || (!isProd ? '2026' : '');
-      const providedPin = req.header('x-admin-pin');
-      if (!configuredPin || providedPin !== configuredPin) {
+      const configuredPin = String(process.env.ADMIN_PIN || '').trim();
+      const providedPin = String(req.header('x-admin-pin') || '').trim();
+      if (!configuredPin || !providedPin || !verifySecretTimingSafe(providedPin, configuredPin)) {
         return res.status(401).json({ error: 'Administrator authentication required' });
       }
     }
