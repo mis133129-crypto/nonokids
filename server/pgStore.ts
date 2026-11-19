@@ -178,6 +178,10 @@ function allowDevInMemoryFallback(): boolean {
   return !shouldUsePgOrFailClosed();
 }
 
+export function isUsingInMemoryDevFallback(): boolean {
+  return allowDevInMemoryFallback();
+}
+
 export function getDbStorageInfo() {
   const usingPg = shouldUsePgOrFailClosed();
   return {

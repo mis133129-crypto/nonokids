@@ -180,10 +180,22 @@ export function validatePassword(
     }
   }
 
+  const hasLetter = /\p{L}/u.test(raw);
+  const hasDigitOrSymbol = /\d|[^\p{L}\s]/u.test(raw);
+  if (!hasLetter || !hasDigitOrSymbol) {
+    return {
+      ok: false,
+      strength: 'weak',
+      score: 1,
+      error: 'Password must include both letters and at least one number or symbol.',
+    };
+  }
+
   let score = 2;
   if (raw.length >= 16) score += 1;
   if (/[a-z]/.test(raw) && /[A-Z]/.test(raw)) score += 1;
-  if (/\d/.test(raw) || /[^A-Za-z0-9]/.test(raw) || /\s/.test(raw)) score += 1;
+  if (/\d/.test(raw) && /[^A-Za-z0-9\s]/.test(raw)) score += 1;
+  else if (/\d/.test(raw) || /[^A-Za-z0-9]/.test(raw) || /\s/.test(raw)) score += 1;
 
   const strength =
     score >= 5 ? 'excellent' : score >= 4 ? 'strong' : score >= 3 ? 'fair' : 'weak';
@@ -287,20 +299,6 @@ export function isValidSafeId(raw: unknown, maxLen = 64): boolean {
   const trimmed = raw.trim();
   if (!trimmed || trimmed.length > maxLen) return false;
   return /^[a-zA-Z0-9_-]+$/.test(trimmed);
-}
-
-export function validatePhone(raw: unknown): { ok: boolean; clean: string; error?: string } {
-  if (raw === undefined || raw === null || raw === '') {
-    return { ok: true, clean: '' };
-  }
-  if (typeof raw !== 'string') {
-    return { ok: false, clean: '', error: 'Invalid phone number format' };
-  }
-  const clean = raw.trim().replace(/[\s()-]/g, '');
-  if (!/^\+?[0-9]{7,16}$/.test(clean)) {
-    return { ok: false, clean: '', error: 'Phone number must be 7 to 16 digits' };
-  }
-  return { ok: true, clean };
 }
 
 export const ALLOWED_TEACHER_SUBJECTS: TeacherSubject[] = [

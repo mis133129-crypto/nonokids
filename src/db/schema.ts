@@ -998,6 +998,48 @@ export const schemaMigrations = pgTable('schema_migrations', {
   appliedAt: text('applied_at').notNull(),
 });
 
+// 24. WebAuthn Passkey Credentials & Single-Use Challenges (Parent Accounts Only)
+export const webauthnCredentials = pgTable(
+  'webauthn_credentials',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    credentialId: text('credential_id').notNull().unique(),
+    publicKey: text('public_key').notNull(),
+    counter: bigint('counter', { mode: 'number' }).notNull().default(0),
+    transports: jsonb('transports').$type<string[]>().notNull().default([]),
+    deviceType: text('device_type').$type<'singleDevice' | 'multiDevice'>().notNull(),
+    backedUp: boolean('backed_up').notNull().default(false),
+    aaguid: text('aaguid').notNull().default(''),
+    label: text('label').notNull(),
+    createdAt: text('created_at').notNull(),
+    lastUsedAt: text('last_used_at'),
+    revokedAt: text('revoked_at'),
+  },
+  (table) => [index('webauthn_credentials_user_id_idx').on(table.userId)],
+);
+
+export const webauthnChallenges = pgTable(
+  'webauthn_challenges',
+  {
+    id: text('id').primaryKey(),
+    challenge: text('challenge').notNull().unique(),
+    purpose: text('purpose').$type<'registration' | 'authentication'>().notNull(),
+    userId: text('user_id').references(() => users.id, { onDelete: 'cascade' }),
+    expectedOrigin: text('expected_origin').notNull(),
+    expectedRpId: text('expected_rp_id').notNull(),
+    expiresAt: bigint('expires_at', { mode: 'number' }).notNull(),
+    usedAt: bigint('used_at', { mode: 'number' }),
+    createdAt: text('created_at').notNull(),
+  },
+  (table) => [
+    index('webauthn_challenges_expires_at_idx').on(table.expiresAt),
+    index('webauthn_challenges_user_id_idx').on(table.userId),
+  ],
+);
+
 // Drizzle Relations
 export const familiesRelations = relations(families, ({ many }) => ({
   users: many(users),
@@ -1011,6 +1053,8 @@ export const usersRelations = relations(users, ({ one, many }) => ({
   family: one(families, { fields: [users.familyId], references: [families.id] }),
   sessions: many(sessions),
   children: many(children),
+  webauthnCredentials: many(webauthnCredentials),
+  webauthnChallenges: many(webauthnChallenges),
 }));
 
 export const childrenRelations = relations(children, ({ one }) => ({
@@ -1018,3 +1062,4 @@ export const childrenRelations = relations(children, ({ one }) => ({
   family: one(families, { fields: [children.familyId], references: [families.id] }),
   credentials: one(childCredentials, { fields: [children.id], references: [childCredentials.childId] }),
 }));
+

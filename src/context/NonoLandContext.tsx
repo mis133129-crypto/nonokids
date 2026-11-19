@@ -1,4 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { browserSupportsWebAuthn, startAuthentication } from '@simplewebauthn/browser';
 import {
   createInitialSkillProgress,
   createSampleChildProfiles,
@@ -192,6 +193,7 @@ interface NonoLandContextValue {
     rememberMe?: boolean;
     portal: 'parent' | 'teacher' | 'admin';
   }) => Promise<PasswordLoginResult>;
+  loginWithPasskey: (input?: { email?: string; rememberMe?: boolean }) => Promise<PasswordLoginResult>;
   childLogin: (accessCode: string, pin: string) => Promise<{ ok: boolean; error?: string }>;
   childQuickLogin: (childId: string, pin: string) => Promise<{ ok: boolean; error?: string }>;
   exitChildMode: () => Promise<void>;
@@ -806,6 +808,121 @@ export const NonoLandProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       return {
         ok: false,
         error: 'Unable to connect to the authentication server. Please check your connection.',
+      };
+    }
+  };
+
+  const loginWithPasskey: NonoLandContextValue['loginWithPasskey'] = async (input) => {
+    try {
+      if (typeof window === 'undefined' || !browserSupportsWebAuthn()) {
+        return {
+          ok: false,
+          error:
+            language === 'ar'
+              ? 'هذا المتصفح لا يدعم مفاتيح المرور (Passkeys). يمكنك تسجيل الدخول بالبريد الإلكتروني وكلمة المرور.'
+              : 'Passkeys are not supported in this browser. Sign in with Email and Password instead.',
+        };
+      }
+
+      const optRes = await fetch('/api/auth/passkeys/login/options', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: input?.email?.trim() ? input.email.trim() : undefined,
+        }),
+      });
+      const optData = (await optRes.json().catch(() => ({}))) as {
+        options?: Parameters<typeof startAuthentication>[0]['optionsJSON'];
+        error?: string;
+        code?: string;
+      };
+      if (!optRes.ok || !optData.options) {
+        return {
+          ok: false,
+          error: formatApiErrorMessage(
+            optRes.status,
+            optData,
+            language,
+            'Could not start Passkey sign-in.',
+            'تعذر بدء تسجيل الدخول بمفتاح المرور.',
+          ),
+        };
+      }
+
+      const assertion = await startAuthentication({ optionsJSON: optData.options });
+
+      const verRes = await fetch('/api/auth/passkeys/login/verify', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          response: assertion,
+          rememberMe: Boolean(input?.rememberMe),
+        }),
+      });
+      const verData = (await verRes.json().catch(() => ({}))) as {
+        user?: ParentAccount;
+        csrfToken?: string;
+        dashboardRoute?: string;
+        error?: string;
+        code?: string;
+      };
+      if (!verRes.ok || !verData.user || verData.user.role !== 'parent') {
+        return {
+          ok: false,
+          error: formatApiErrorMessage(
+            verRes.status,
+            verData,
+            language,
+            'Passkey verification failed. Use Email + Password if needed.',
+            'فشل التحقق من مفتاح المرور. يمكنك استخدام البريد الإلكتروني وكلمة المرور.',
+          ),
+        };
+      }
+
+      const verified = await refreshAuthSession();
+      if (!verified || !verified.authenticated || !verified.user) {
+        return {
+          ok: false,
+          error:
+            language === 'ar'
+              ? 'تم التحقق من مفتاح المرور ولكن تعذر تأكيد الجلسة.'
+              : 'Passkey verified, but session confirmation failed.',
+        };
+      }
+
+      const destination = resolveDestinationForRole(verified.user.role) || 'parent-dashboard';
+      soundEngine.playSuccess();
+      setScreen(destination);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return { ok: true, destination };
+    } catch (err) {
+      const errName = (err as { name?: string })?.name || '';
+      if (errName === 'NotAllowedError') {
+        return {
+          ok: false,
+          error:
+            language === 'ar'
+              ? 'تم إلغاء طلب مفتاح المرور أو تعذر الوصول إليه في هذا السياق. يمكنك التسجيل بكلمة المرور.'
+              : 'Passkey prompt was cancelled or unavailable here. You can always sign in with your password.',
+        };
+      }
+      if (errName === 'SecurityError') {
+        return {
+          ok: false,
+          error:
+            language === 'ar'
+              ? 'مفاتيح المرور غير مسموح بها داخل هذه النافذة المضمنة. افتح الصفحة مباشرة أو استخدم كلمة المرور.'
+              : 'Passkeys cannot run inside this embedded frame. Open the app directly or sign in with your password.',
+        };
+      }
+      return {
+        ok: false,
+        error:
+          language === 'ar'
+            ? 'تعذر إكمال تسجيل الدخول بمفتاح المرور. استخدم كلمة المرور كبديل دائم.'
+            : 'Unable to complete Passkey sign-in. Your email and password remain available.',
       };
     }
   };
@@ -2467,6 +2584,7 @@ export const NonoLandProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         refreshChildrenList,
         enterSampleDemoMode,
         loginWithPassword,
+        loginWithPasskey,
         childLogin,
         childQuickLogin,
         exitChildMode,

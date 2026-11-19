@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
 import { motion } from 'motion/react';
+import { browserSupportsWebAuthn } from '@simplewebauthn/browser';
 import {
   Check,
   Copy,
   Eye,
   EyeOff,
+  Fingerprint,
   GraduationCap,
   KeyRound,
   MailCheck,
@@ -152,6 +154,7 @@ export const ParentAuthScreen: React.FC = () => {
     authSession,
     dbUnavailable,
     loginWithPassword,
+    loginWithPasskey,
     childLogin,
     childQuickLogin,
     enterSampleDemoMode,
@@ -162,7 +165,6 @@ export const ParentAuthScreen: React.FC = () => {
   >('login');
   const [name, setName] = useState(parentAccount?.isDemoMode ? '' : parentAccount?.name || '');
   const [email, setEmail] = useState(parentAccount?.isDemoMode ? '' : parentAccount?.email || '');
-  const [phone, setPhone] = useState('');
   const [teacherSubjects, setTeacherSubjects] = useState<string[]>(['arabic', 'english', 'math']);
   const [setupSecret, setSetupSecret] = useState('');
   const [adminBootstrapStatus, setAdminBootstrapStatus] = useState<{
@@ -298,7 +300,6 @@ export const ParentAuthScreen: React.FC = () => {
           body: JSON.stringify({
             displayName: name,
             email,
-            phone: phone.trim() || undefined,
             subjects: teacherSubjects,
             password,
             confirmPassword,
@@ -1157,18 +1158,6 @@ export const ParentAuthScreen: React.FC = () => {
               {mode === 'teacher-register' && (
                 <div className="space-y-3">
                   <div>
-                    <label className="block text-sm font-bold mb-1.5">
-                      {language === 'ar' ? 'رقم الهاتف (اختياري)' : 'Phone Number (optional)'}
-                    </label>
-                    <input
-                      type="tel"
-                      value={phone}
-                      onChange={(e) => setPhone(e.target.value)}
-                      placeholder="+201001234567"
-                      className="w-full h-11 px-4 rounded-2xl bg-[#FFF8E9] border-2 border-[#27345C]/12 focus:border-[#8054D9] outline-none font-semibold"
-                    />
-                  </div>
-                  <div>
                     <label className="block text-xs font-extrabold mb-1.5 text-[#27345C]/80">
                       {language === 'ar' ? 'المواد التي تدرسها:' : 'Teaching Subjects:'}
                     </label>
@@ -1376,6 +1365,52 @@ export const ParentAuthScreen: React.FC = () => {
                               : 'Update Password'}
               </button>
             </form>
+
+            {entryPortal === 'parent' && mode === 'login' && typeof window !== 'undefined' && browserSupportsWebAuthn() && (
+              <div className="space-y-2 pt-1">
+                <div className="flex items-center gap-2 text-[11px] font-bold text-[#27345C]/55">
+                  <div className="flex-1 h-px bg-[#27345C]/12" />
+                  <span>{language === 'ar' ? 'أو' : 'OR'}</span>
+                  <div className="flex-1 h-px bg-[#27345C]/12" />
+                </div>
+                <button
+                  type="button"
+                  disabled={submitting}
+                  onClick={async () => {
+                    setErrorMsg('');
+                    setDevNotice('');
+                    setSubmitting(true);
+                    try {
+                      const res = await loginWithPasskey({ email, rememberMe });
+                      if (!res.ok) {
+                        setErrorMsg(
+                          res.error ||
+                            (language === 'ar'
+                              ? 'فشل تسجيل الدخول بمفتاح المرور.'
+                              : 'Passkey sign-in failed.'),
+                        );
+                        soundEngine.playEncourage();
+                      }
+                    } finally {
+                      setSubmitting(false);
+                    }
+                  }}
+                  className="w-full h-12 rounded-2xl bg-[#F4EEFF] hover:bg-[#EAE0FF] border-2 border-[#8054D9]/30 text-[#27345C] font-extrabold text-sm flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 whitespace-nowrap"
+                >
+                  <Fingerprint className="w-4 h-4 text-[#8054D9]" />
+                  <span>
+                    {language === 'ar'
+                      ? 'تسجيل الدخول بمفتاح المرور (Passkey)'
+                      : 'Sign in with Passkey'}
+                  </span>
+                </button>
+                <p className="text-[11px] font-bold text-center text-[#27345C]/65">
+                  {language === 'ar'
+                    ? 'اختياري لحسابات أولياء الأمور — يظل البريد الإلكتروني وكلمة المرور متاحين دائماً.'
+                    : 'Optional for parent accounts — Email & Password always stays available.'}
+                </p>
+              </div>
+            )}
           </>
         )}
 

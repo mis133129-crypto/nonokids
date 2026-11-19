@@ -66,6 +66,11 @@ import { registerFamilyEcosystemRoutes } from './server/familyEcosystemRoutes';
 import { registerGovernanceAndHomeworkRoutes } from './server/governanceAndHomeworkRoutes';
 import { registerLearningAndGardenRoutes } from './server/learningAndGardenRoutes';
 import { registerNonoAiRoutes } from './server/nonoAiRoutes';
+import {
+  clearPasswordReauth,
+  clearPasswordReauthForUser,
+  registerPasskeyRoutes,
+} from './server/passkeyRoutes';
 import { registerReadingAndFamilyRoutes } from './server/readingAndFamilyRoutes';
 import { registerSmartAssessmentRoutes } from './server/smartAssessmentRoutes';
 import { registerTeacherAndLevel2Routes } from './server/teacherRoutes';
@@ -131,7 +136,6 @@ function toSafeUser(user: StoredUserRecord) {
     normalizedEmail: user.normalizedEmail,
     role: user.role,
     status: user.status,
-    phone: user.phone,
     bio: user.bio,
     linkedChildId: user.linkedChildId,
     familyId: user.familyId,
@@ -240,6 +244,7 @@ async function startServer() {
 
   function revokeAllUserSessions(userId: string) {
     const db = getDb();
+    clearPasswordReauthForUser(userId);
     for (const [hash, s] of Object.entries(db.sessions)) {
       if (s.userId === userId) {
         delete db.sessions[hash];
@@ -279,6 +284,8 @@ async function startServer() {
     '/api/auth/forgot-password',
     '/api/auth/reset-password',
     '/api/auth/verify-email',
+    '/api/auth/passkeys/login/options',
+    '/api/auth/passkeys/login/verify',
   ]);
 
   app.get('/api/admin/diagnostics', async (req: AuthenticatedRequest, res) => {
@@ -1041,6 +1048,7 @@ async function startServer() {
     const raw = cookies[SESSION_COOKIE_NAME];
     if (raw) {
       const tokenH = hashToken(raw);
+      clearPasswordReauth(tokenH);
       const sess = db.sessions[tokenH];
       const sessUser = sess ? db.users[sess.userId] : undefined;
       delete db.sessions[tokenH];
@@ -2495,6 +2503,15 @@ async function startServer() {
     revokeAllUserSessions,
     toSafeUser,
     isProd: IS_PROD,
+  });
+
+  registerPasskeyRoutes({
+    app,
+    getDb,
+    saveDb,
+    requireAuth,
+    createSessionForUser,
+    toSafeUser,
   });
 
   registerFamilyEcosystemRoutes({

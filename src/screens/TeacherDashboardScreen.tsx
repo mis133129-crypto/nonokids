@@ -200,7 +200,6 @@ export const TeacherDashboardScreen: React.FC = () => {
 
   // Profile & password state
   const [profName, setProfName] = useState(authSession.user?.name || '');
-  const [profPhone, setProfPhone] = useState(authSession.user?.phone || '');
   const [profBio, setProfBio] = useState(authSession.user?.teacherProfile?.bio || '');
   const [curPw, setCurPw] = useState('');
   const [newPw, setNewPw] = useState('');
@@ -246,7 +245,6 @@ export const TeacherDashboardScreen: React.FC = () => {
     if (authSession.authenticated && authSession.user?.role === 'teacher') {
       void loadAll();
       setProfName(authSession.user.name || '');
-      setProfPhone(authSession.user.phone || '');
     }
   }, [authSession.authenticated, authSession.user, loadAll]);
 
@@ -530,7 +528,7 @@ export const TeacherDashboardScreen: React.FC = () => {
     const res = await apiFetch('/api/auth/profile', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ displayName: profName, phone: profPhone, bio: profBio }),
+      body: JSON.stringify({ displayName: profName, bio: profBio }),
     });
     const data = await res.json();
     if (!res.ok) return setErrorMsg(data.error || 'Profile update failed');
@@ -1624,7 +1622,6 @@ export const TeacherDashboardScreen: React.FC = () => {
                   {language === 'ar' ? 'تحديث الملف الشخصي' : 'Profile Settings'}
                 </h3>
                 <input required value={profName} onChange={(e) => setProfName(e.target.value)} placeholder="Display Name" className="w-full h-10 px-3 rounded-xl border border-[#27345C]/20" />
-                <input value={profPhone} onChange={(e) => setProfPhone(e.target.value)} placeholder="Phone (+20...)" className="w-full h-10 px-3 rounded-xl border border-[#27345C]/20" />
                 <textarea rows={3} value={profBio} onChange={(e) => setProfBio(e.target.value)} placeholder="Short Teaching Bio" className="w-full p-3 rounded-xl border border-[#27345C]/20" />
                 <button type="submit" className="nono-btn-tactile px-5 py-2 rounded-xl bg-[#8054D9] text-white font-extrabold cursor-pointer">Save Profile</button>
               </form>

@@ -39,7 +39,6 @@ import {
   validateExamScheduleAndConfig,
   validateParentName,
   validatePassword,
-  validatePhone,
   validateTeacherQuestionInput,
 } from '../src/utils/validation';
 import type { AuthenticatedRequest, ServerDb, StoredChildRecord } from './dbTypes';
@@ -501,7 +500,6 @@ export function registerTeacherAndLevel2Routes(deps: TeacherRoutesDeps): void {
       email?: string;
       password?: string;
       confirmPassword?: string;
-      phone?: string;
       subjects?: string[];
       bio?: string;
       role?: string;
@@ -532,9 +530,6 @@ export function registerTeacherAndLevel2Routes(deps: TeacherRoutesDeps): void {
     const pwCheck = validatePassword(body.password || '', emailCheck.normalized, nameCheck.clean);
     if (!pwCheck.ok) return res.status(400).json({ error: pwCheck.error });
 
-    const phoneCheck = validatePhone(body.phone);
-    if (!phoneCheck.ok) return res.status(400).json({ error: phoneCheck.error });
-
     if (body.termsAccepted !== true) {
       return res.status(400).json({ error: 'You must accept the Platform Policies and Terms.' });
     }
@@ -560,13 +555,11 @@ export function registerTeacherAndLevel2Routes(deps: TeacherRoutesDeps): void {
       role: 'teacher', // fixed strictly on server; pending admin approval
       emailVerified: false,
       status: 'pending',
-      phone: phoneCheck.clean || undefined,
       bio: sanitizeLongText(body.bio, 400) || undefined,
       teacherProfile: {
         userId,
         displayName: nameCheck.clean,
         email: (body.email || '').trim(),
-        phone: phoneCheck.clean || undefined,
         bio: sanitizeLongText(body.bio, 400) || undefined,
         subjects: subjects.length > 0 ? subjects : ['arabic'],
         permissions: [...DEFAULT_TEACHER_PERMISSIONS],
@@ -671,13 +664,6 @@ export function registerTeacherAndLevel2Routes(deps: TeacherRoutesDeps): void {
       if (!nc.ok) return res.status(400).json({ error: nc.error });
       user.displayName = nc.clean;
       if (user.teacherProfile) user.teacherProfile.displayName = nc.clean;
-    }
-
-    if (body.phone !== undefined) {
-      const pc = validatePhone(body.phone);
-      if (!pc.ok) return res.status(400).json({ error: pc.error });
-      user.phone = pc.clean || undefined;
-      if (user.teacherProfile) user.teacherProfile.phone = pc.clean || undefined;
     }
 
     if (body.bio !== undefined) {
@@ -807,7 +793,6 @@ export function registerTeacherAndLevel2Routes(deps: TeacherRoutesDeps): void {
       displayName,
       email,
       password,
-      phone,
       subjects,
       permissions,
       status = 'active',
@@ -815,7 +800,6 @@ export function registerTeacherAndLevel2Routes(deps: TeacherRoutesDeps): void {
       displayName?: string;
       email?: string;
       password?: string;
-      phone?: string;
       subjects?: string[];
       permissions?: TeacherPermission[];
       status?: AccountStatus;
@@ -829,9 +813,6 @@ export function registerTeacherAndLevel2Routes(deps: TeacherRoutesDeps): void {
 
     const pwCheck = validatePassword(password || '', emailCheck.normalized, nameCheck.clean);
     if (!pwCheck.ok) return res.status(400).json({ error: pwCheck.error });
-
-    const phoneCheck = validatePhone(phone);
-    if (!phoneCheck.ok) return res.status(400).json({ error: phoneCheck.error });
 
     if (db.emailIndex[emailCheck.normalized]) {
       return res.status(409).json({ error: 'An account with this email already exists' });
@@ -858,12 +839,10 @@ export function registerTeacherAndLevel2Routes(deps: TeacherRoutesDeps): void {
       role: 'teacher',
       emailVerified: true,
       status: cleanStatus,
-      phone: phoneCheck.clean || undefined,
       teacherProfile: {
         userId,
         displayName: nameCheck.clean,
         email: emailCheck.normalized,
-        phone: phoneCheck.clean || undefined,
         subjects: cleanSubjects.length > 0 ? cleanSubjects : ['arabic'],
         permissions: cleanPerms,
         approvedBy: req.authSession?.user.id || 'admin-pin',

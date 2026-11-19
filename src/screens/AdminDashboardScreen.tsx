@@ -47,7 +47,6 @@ interface AdminTeacherRow {
   id: string;
   name: string;
   email: string;
-  phone?: string;
   bio?: string;
   status: AccountStatus;
   createdAt?: string;
@@ -201,7 +200,6 @@ export const AdminDashboardScreen: React.FC = () => {
   const [newTName, setNewTName] = useState('');
   const [newTEmail, setNewTEmail] = useState('');
   const [newTPassword, setNewTPassword] = useState('');
-  const [newTPhone, setNewTPhone] = useState('');
 
   // Create Subordinate Admin Form (Super Admin Only)
   const [newAdmName, setNewAdmName] = useState('');
@@ -328,8 +326,7 @@ export const AdminDashboardScreen: React.FC = () => {
       if (!q) return true;
       return (
         tc.name.toLowerCase().includes(q) ||
-        tc.email.toLowerCase().includes(q) ||
-        (tc.phone || '').toLowerCase().includes(q)
+        tc.email.toLowerCase().includes(q)
       );
     });
   }, [teachers, teacherSearch, teacherStatusFilter]);
@@ -471,7 +468,6 @@ export const AdminDashboardScreen: React.FC = () => {
         displayName: newTName,
         email: newTEmail,
         password: newTPassword,
-        phone: newTPhone || undefined,
         status: 'active',
         permissions: DEFAULT_TEACHER_PERMISSIONS,
       }),
@@ -486,7 +482,6 @@ export const AdminDashboardScreen: React.FC = () => {
     setNewTName('');
     setNewTEmail('');
     setNewTPassword('');
-    setNewTPhone('');
     await loadAdminData();
   };
 
@@ -1043,7 +1038,7 @@ export const AdminDashboardScreen: React.FC = () => {
                         {renderStatusBadge(tc.status)}
                       </div>
                       <p className="text-[#27345C]/75">
-                        {tc.email} {tc.phone ? `· ${tc.phone}` : ''}
+                        {tc.email}
                       </p>
                       <p className="text-[#27345C]/65">
                         {language === 'ar' ? 'تاريخ الطلب:' : 'Submitted:'}{' '}
@@ -1173,12 +1168,6 @@ export const AdminDashboardScreen: React.FC = () => {
                 placeholder={language === 'ar' ? 'كلمة مرور قوية (١٢+ حرفاً)' : 'Strong Password (12+ chars)'}
                 value={newTPassword}
                 onChange={(e) => setNewTPassword(e.target.value)}
-                className="h-10 px-3 rounded-xl border border-[#27345C]/20"
-              />
-              <input
-                placeholder={language === 'ar' ? 'الهاتف (اختياري)' : 'Phone (+20...)'}
-                value={newTPhone}
-                onChange={(e) => setNewTPhone(e.target.value)}
                 className="h-10 px-3 rounded-xl border border-[#27345C]/20"
               />
             </div>
@@ -1851,9 +1840,6 @@ export const AdminDashboardScreen: React.FC = () => {
             <div className="space-y-1.5 text-[#27345C]/80">
               <p>
                 <strong>{language === 'ar' ? 'البريد:' : 'Email:'}</strong> {detailTeacher.email}
-              </p>
-              <p>
-                <strong>{language === 'ar' ? 'الهاتف:' : 'Phone:'}</strong> {detailTeacher.phone || '—'}
               </p>
               <p>
                 <strong>{language === 'ar' ? 'تاريخ التسجيل:' : 'Registered:'}</strong>{' '}

@@ -14,6 +14,7 @@ import {
   Eye,
   FileBarChart2,
   Film,
+  Fingerprint,
   Flame,
   History,
   KeyRound,
@@ -75,6 +76,9 @@ const FamilyActivityLogPanel = lazy(() =>
 );
 const ParentGatePanel = lazy(() =>
   import('../components/family/ParentGatePanel').then((m) => ({ default: m.ParentGatePanel })),
+);
+const PasskeysPanel = lazy(() =>
+  import('../components/family/PasskeysPanel').then((m) => ({ default: m.PasskeysPanel })),
 );
 import { PARENT_OFFLINE_ACTIVITIES } from '../data/academyData';
 import { AGE_CURRICULUM_OUTCOMES } from '../data/deepCurriculum';
@@ -178,6 +182,7 @@ export const ParentDashboardScreen: React.FC = () => {
     | 'ai-controls'
     | 'guardians'
     | 'devices'
+    | 'passkeys'
     | 'security-log'
     | 'parent-gate'
     | 'reports'
@@ -628,6 +633,7 @@ export const ParentDashboardScreen: React.FC = () => {
           { id: 'ai-controls' as const, label: { ar: 'مساعد نونو الصوتي', en: 'Nono AI & Voice' }, icon: <Bot className="w-4 h-4" /> },
           { id: 'guardians' as const, label: { ar: 'أولياء الأمور', en: 'Guardians' }, icon: <Users className="w-4 h-4" /> },
           { id: 'devices' as const, label: { ar: 'الأجهزة الموثوقة', en: 'Trusted Devices' }, icon: <Laptop className="w-4 h-4" /> },
+          { id: 'passkeys' as const, label: { ar: 'مفاتيح المرور (Passkeys)', en: 'Passkeys' }, icon: <Fingerprint className="w-4 h-4" /> },
           { id: 'security-log' as const, label: { ar: 'سجل الأمان', en: 'Security Log' }, icon: <History className="w-4 h-4" /> },
           { id: 'parent-gate' as const, label: { ar: 'بوابة الحماية PIN', en: 'Parent Gate' }, icon: <Lock className="w-4 h-4" /> },
           { id: 'reports' as const, label: UI_COPY.parent.overviewTab, icon: <BarChart3 className="w-4 h-4" /> },
@@ -696,6 +702,7 @@ export const ParentDashboardScreen: React.FC = () => {
             onRequestGateUnlock={() => setTab('parent-gate')}
           />
         )}
+        {tab === 'passkeys' && <PasskeysPanel />}
         {tab === 'security-log' && <FamilyActivityLogPanel />}
         {tab === 'parent-gate' && (
           <ParentGatePanel

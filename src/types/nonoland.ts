@@ -290,6 +290,17 @@ export interface ParentAccount {
   isDemoMode: boolean;
 }
 
+export interface PasskeySummary {
+  id: string;
+  label: string;
+  deviceType: 'singleDevice' | 'multiDevice';
+  backedUp: boolean;
+  transports: string[];
+  createdAt: string;
+  lastUsedAt?: string | null;
+  revokedAt?: string | null;
+}
+
 export interface SecurityEventLog {
   id: string;
   eventType:
@@ -300,6 +311,12 @@ export interface SecurityEventLog {
     | 'EMAIL_VERIFIED'
     | 'PASSWORD_RESET'
     | 'PASSWORD_CHANGED'
+    | 'PASSWORD_REAUTH_SUCCESS'
+    | 'PASSWORD_REAUTH_FAIL'
+    | 'PASSKEY_REGISTERED'
+    | 'PASSKEY_LOGIN_SUCCESS'
+    | 'PASSKEY_LOGIN_FAIL'
+    | 'PASSKEY_REVOKED'
     | 'LOGOUT_ALL'
     | 'PARENT_GATE_FAIL'
     | 'PAYMENT_VERIFIED'
